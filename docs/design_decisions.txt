@@ -1,0 +1,2 @@
+1. using macro based switching for linux and windows implementation, instead of a common interface to avoid runtime polymorphism costs (vtable). Macros allows for compile time disabling of other platform utilities saving in runtime costs
+

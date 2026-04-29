@@ -8,15 +8,15 @@ add_library(messaging_system STATIC
     src/test.cpp
 )
 
-add_executable(client src/network/client.cpp)
-add_executable(server src/network/server.cpp)
-
-target_include_directories(client
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+set(SOURCES
+    src/app/main.cpp
+    src/network/socket.cpp
+    src/network/messaging_node.cpp
 )
 
-target_include_directories(server
+add_executable(messaging_app ${SOURCES})
+
+target_include_directories(messaging_app
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -31,6 +31,5 @@ add_subdirectory(benchmarks)
 add_subdirectory(examples)
 
 if(WIN32)
-    target_link_libraries(client ws2_32)
-    target_link_libraries(server ws2_32)
+    target_link_libraries(messaging_app ws2_32)
 endif()
