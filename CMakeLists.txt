@@ -29,3 +29,8 @@ target_include_directories(messaging_system
 add_subdirectory(tests)
 add_subdirectory(benchmarks)
 add_subdirectory(examples)
+
+if(WIN32)
+    target_link_libraries(client ws2_32)
+    target_link_libraries(server ws2_32)
+endif()
