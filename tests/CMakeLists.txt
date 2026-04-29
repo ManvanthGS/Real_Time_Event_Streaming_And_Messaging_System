@@ -8,15 +8,15 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_executable(sample_project_tests
+add_executable(messaging_system_tests
     test_app.cpp
 )
 
-target_link_libraries(sample_project_tests
+target_link_libraries(messaging_system_tests
     PRIVATE
-        sample_project
+        messaging_system
         GTest::gtest_main
 )
 
 include(GoogleTest)
-gtest_discover_tests(sample_project_tests)
+gtest_discover_tests(messaging_system_tests)

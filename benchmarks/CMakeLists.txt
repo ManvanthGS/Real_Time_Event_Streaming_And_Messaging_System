@@ -1,2 +1,2 @@
 add_executable(perf_overhead perf_overhead.cpp)
-target_link_libraries(perf_overhead PRIVATE sample_project)
+target_link_libraries(perf_overhead PRIVATE messaging_system)
