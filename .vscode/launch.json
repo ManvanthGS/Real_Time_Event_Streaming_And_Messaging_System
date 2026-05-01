@@ -1,0 +1,47 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Node 8080",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/wsl-debug/messaging_app",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "console": "integratedTerminal" // This is key for typing commands
+        },
+        {
+            "name": "Debug Node 9090",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/wsl-debug/messaging_app",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "console": "integratedTerminal"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Debug Both Nodes",
+            "configurations": [
+                "Debug Node 8080",
+                "Debug Node 9090"
+            ]
+        }
+    ]
+}
