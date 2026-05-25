@@ -14,17 +14,32 @@ void printHelp()
     std::cout << "-------------------------------\n" << std::endl;
 }
 
-int main()
+int main(int argc, char* argv[])
 {
     MessagingNode node;
     int myPort;
 
     std::cout << "=== Real-Time Messaging Node ===" << std::endl;
-    std::cout << "Enter local port to listen on: ";
-    if (!(std::cin >> myPort))
+    if (argc > 1)
     {
-        std::cerr << "Invalid port input." << std::endl;
-        return 1;
+        try
+        {
+            myPort = std::stoi(argv[1]);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Invalid port argument: " << e.what() << std::endl;
+            return 1;
+        }
+    }
+    else
+    {
+        std::cout << "Enter local port to listen on: ";
+        if (!(std::cin >> myPort))
+        {
+            std::cerr << "Invalid port input." << std::endl;
+            return 1;
+        }
     }
 
     // Start the internal listener and acceptance loop
