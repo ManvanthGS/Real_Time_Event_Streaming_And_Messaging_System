@@ -140,10 +140,9 @@ bool Socket::send_all(const std::vector<uint8_t>& data)
     size_t total_sent = 0;
     while (total_sent < data.size())
     {
-        int bytes = ::send(m_handle,
-                           reinterpret_cast<const char*>(data.data() + total_sent),
-                           static_cast<int>(data.size() - total_sent),
-                           0);
+        int bytes =
+            ::send(m_handle, reinterpret_cast<const char*>(data.data() + total_sent),
+                   static_cast<int>(data.size() - total_sent), 0);
         if (bytes <= 0)
             return false; // Genuine error or peer disconnected
         total_sent += static_cast<size_t>(bytes);
@@ -183,10 +182,9 @@ bool Socket::recv_exact(std::vector<uint8_t>& buffer, size_t size)
     size_t total_received = 0;
     while (total_received < size)
     {
-        int bytes = ::recv(m_handle,
-                           reinterpret_cast<char*>(buffer.data() + total_received),
-                           static_cast<int>(size - total_received),
-                           0);
+        int bytes =
+            ::recv(m_handle, reinterpret_cast<char*>(buffer.data() + total_received),
+                   static_cast<int>(size - total_received), 0);
         if (bytes <= 0)
         {
             buffer.clear();

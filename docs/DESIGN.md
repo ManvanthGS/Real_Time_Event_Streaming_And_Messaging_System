@@ -227,39 +227,39 @@ The ref-count keeps the `Socket` alive even if another thread erases it from the
 
 ### ✅ Phase 0 — Foundation Bug Fixes (COMPLETE)
 
-**Goal:** Make the existing code correct before adding features.
+**Goal:** Make the existing code correct before adding features. Phase 0 audited the initial skeleton and fixed **6 critical correctness bugs** before any feature work began. The principle: *make it correct first, then make it fast*.
 
-#### Bugs Fixed
+#### Bugs Fixed & Architectural Improvements
 
 | Bug | Severity | Root Cause | Fix Applied |
 |---|---|---|---|
-| **Bug 1** — Data race in `receiveLoop` | 🔴 Critical | Mutex released before socket access | `shared_ptr` copy pattern — take copy under lock, use outside |
-| **Bug 2** — No TCP framing | 🔴 Critical | `recv()` returns arbitrary byte counts | New `FramedSocket` + `recv_exact()` / `send_all()` |
-| **Bug 3** — Broadcast holds lock during I/O | 🔴 Critical | Blocking `send()` called inside `lock_guard` scope | Snapshot `shared_ptr` vector under lock, send outside |
-| **Bug 4** — Thread-per-connection | 🟡 Scalability | One OS thread per peer | **Acknowledged** — will fix in Phase 2 (epoll/IOCP) |
-| **Bug 5** — Partial `send()` unhandled | 🔴 Critical | `send()` return value ignored | New `send_all()` retry loop |
-| **Bug 6** — No endian handling | 🔴 Critical | Multi-byte fields in host byte order | `MessageHeader::to_bytes()` / `from_bytes()` with `htonl`/`ntohs` |
+| **1. Data race in `receiveLoop`** | 🔴 Critical (UB) | Mutex released before socket access; another thread could free the socket in the gap | Changed peer map from `unique_ptr` → `shared_ptr`. Take a copy (bumping ref-count) while locked, then use it after releasing the mutex. The socket lives as long as the copy exists. |
+| **2. No TCP message framing** | 🔴 Critical | TCP is a byte stream — `recv()` returns arbitrary byte counts, splitting or merging messages silently | New `FramedSocket` class + `recv_exact()`. Always reads exactly `sizeof(header)` bytes, parses the `length` field, then reads exactly that many body bytes. |
+| **3. Broadcast holds global mutex during I/O** | 🔴 Critical | `send()` is blocking; holding the lock for all sends starves every other thread | Snapshot `shared_ptr` vector under lock (microseconds), release lock, then do all sends outside it. |
+| **4. Thread-per-connection model** | 🟡 Scalability | One OS thread per peer — 8 MB stack each, context-switch overhead, no graceful join | **Acknowledged** — will be replaced with an epoll/IOCP event loop in Phase 2. |
+| **5. Partial `send()` unhandled** | 🔴 Critical | `send()` can return fewer bytes than requested (kernel buffer full); return value was ignored | New `send_all()` retry loop that keeps sending until all bytes are queued or an error occurs. |
+| **6. No endian-safe serialization** | 🔴 Critical | Multi-byte header fields written in host byte order (little-endian on x86) — garbage on cross-platform communication | `MessageHeader::to_bytes()` / `from_bytes()` using `htonl`/`ntohs`. All wire values are now big-endian regardless of host CPU. |
 
-#### Files Changed
+#### Files Changed & Components Added
 
 | File | Change |
 |---|---|
-| `include/protocol/message.hpp` | Added endian-safe `to_bytes()` / `from_bytes()` |
-| `include/protocol/framing.hpp` | **New** — `FramedSocket`, `ParsedMessage` |
-| `src/protocol/framing.cpp` | **New** — framing implementation |
-| `include/network/socket.hpp` | Added `send_all()`, `recv_exact()` |
-| `src/network/socket.cpp` | Implemented `send_all()`, `recv_exact()` |
-| `include/network/messaging_node.hpp` | `unique_ptr` → `shared_ptr` for peers |
-| `src/network/messaging_node.cpp` | Fixed Bugs 1, 2, 3 — full rewrite with comments |
-| `CMakeLists.txt` | Added `src/protocol/framing.cpp` |
+| `include/protocol/message.hpp` | Added endian-safe `to_bytes()` / `from_bytes()` with `htonl`/`ntohs` |
+| `include/protocol/framing.hpp` | **New** — `FramedSocket` wrapping `Socket` for length-prefix framing, and `ParsedMessage` struct |
+| `src/protocol/framing.cpp` | **New** — implementation of framing, including single-buffer `send_all` to minimize syscalls and `recv_exact` for robust reads |
+| `include/network/socket.hpp` | Added `send_all()` and `recv_exact()` for robust stream handling |
+| `src/network/socket.cpp` | Implemented `send_all()` (retry loop) and `recv_exact()` (accumulation loop) |
+| `include/network/messaging_node.hpp` | Changed peer tracking to use `std::shared_ptr` to safely pass ownership to threads |
+| `src/network/messaging_node.cpp` | Full rewrite of threading logic: fixed Bugs 1, 2, and 3 with annotated before/after comments |
+| `CMakeLists.txt` | Integrated `src/protocol/framing.cpp` into the build |
 
-#### Knowledge Base Entries Created
+#### Knowledge Base Entries Created (138 KB total)
 
-- `knowledge_base/phase_0/01_tcp_stream_semantics.md`
-- `knowledge_base/phase_0/02_data_races_and_mutex_scope.md`
-- `knowledge_base/phase_0/03_partial_io_handling.md`
-- `knowledge_base/phase_0/04_network_byte_order.md`
-- `knowledge_base/phase_0/05_thread_per_connection_problem.md`
+- `knowledge_base/phase_0/01_tcp_stream_semantics.md` (16 KB)
+- `knowledge_base/phase_0/02_data_races_and_mutex_scope.md` (31 KB)
+- `knowledge_base/phase_0/03_partial_io_handling.md` (39 KB)
+- `knowledge_base/phase_0/04_network_byte_order.md` (25 KB)
+- `knowledge_base/phase_0/05_thread_per_connection_problem.md` (27 KB)
 
 ---
 
