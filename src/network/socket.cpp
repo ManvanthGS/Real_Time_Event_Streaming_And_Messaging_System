@@ -126,6 +126,32 @@ int Socket::send(const std::vector<uint8_t>& data)
                   0);
 }
 
+bool Socket::send_all(const std::vector<uint8_t>& data)
+{
+    // FIX (Bug 5): The kernel send buffer may be full, causing send() to
+    // return fewer bytes than requested. We retry until all bytes are sent
+    // or a genuine error/disconnect occurs.
+    //
+    // Why this happens:
+    //   The kernel has a finite send buffer (SO_SNDBUF, default ~128KB on Linux).
+    //   When it's full, send() returns the number of bytes actually queued
+    //   (which may be less than data.size()). Ignoring this means silently
+    //   dropping the rest of the message with no error reported.
+    size_t total_sent = 0;
+    while (total_sent < data.size())
+    {
+        int bytes = ::send(m_handle,
+                           reinterpret_cast<const char*>(data.data() + total_sent),
+                           static_cast<int>(data.size() - total_sent),
+                           0);
+        if (bytes <= 0)
+            return false; // Genuine error or peer disconnected
+        total_sent += static_cast<size_t>(bytes);
+    }
+    LOG_DEBUG("send_all: " << total_sent << " bytes sent on handle: " << m_handle);
+    return true;
+}
+
 int Socket::receive(std::vector<uint8_t>& buffer, size_t size)
 {
     buffer.assign(size, 0);
@@ -140,4 +166,33 @@ int Socket::receive(std::vector<uint8_t>& buffer, size_t size)
         buffer.clear();
     }
     return bytes;
+}
+
+bool Socket::recv_exact(std::vector<uint8_t>& buffer, size_t size)
+{
+    // FIX (Bug 2 — partial reads):
+    // TCP is a byte stream. A single recv() call may return anywhere from
+    // 1 byte up to `size` bytes. recv_exact() loops until the buffer is
+    // completely filled, making partial reads invisible to the caller.
+    //
+    // This is the building block for FramedSocket::recv_message(), which
+    // calls recv_exact(HEADER_SIZE) and then recv_exact(body_size) to
+    // atomically reassemble a complete message regardless of how TCP
+    // fragments it.
+    buffer.resize(size);
+    size_t total_received = 0;
+    while (total_received < size)
+    {
+        int bytes = ::recv(m_handle,
+                           reinterpret_cast<char*>(buffer.data() + total_received),
+                           static_cast<int>(size - total_received),
+                           0);
+        if (bytes <= 0)
+        {
+            buffer.clear();
+            return false; // Connection closed or error
+        }
+        total_received += static_cast<size_t>(bytes);
+    }
+    return true;
 }
