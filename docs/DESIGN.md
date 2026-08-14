@@ -36,24 +36,23 @@ understand and implement every layer — from the BSD socket API to lock-free da
 
 ## 2. Architecture Overview
 
-### Target Architecture (End State)
+### Target Architecture (Dual-Mode Platform)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Application Layer                     │
-│           Producer CLI    Consumer CLI    Broker CLI     │
+│               Producer CLI    Consumer CLI               │
 ├─────────────────────────────────────────────────────────┤
-│                     Broker Core                          │
-│    Topic Registry   Subscriber Map   Routing Engine     │
-├─────────────────────────────────────────────────────────┤
-│                   Protocol Layer                         │
-│    FramedSocket   MessageHeader   Serialization         │
-├─────────────────────────────────────────────────────────┤
-│                    Network Layer                         │
-│    Socket (RAII)   EventLoop (epoll/IOCP)               │
-├─────────────────────────────────────────────────────────┤
-│                   Platform Layer                         │
-│        Linux (epoll, writev)   Windows (IOCP, WSASend)  │
+│                Transport Abstraction (ITransport)        │
+├──────────────────────────────┬──────────────────────────┤
+│    Strategy A: TCP Broker    │ Strategy B: Brokerless   │
+│   (Centralized, WAN/Cloud)   │   (UDP Multicast, LAN)   │
+├──────────────────────────────┼──────────────────────────┤
+│   epoll/IOCP Event Loop      │ Sequence Numbers & NAKs  │
+│   Lock-Free Ring Buffers     │ Zero-Copy UDP Sockets    │
+├──────────────────────────────┴──────────────────────────┤
+│                    Platform Layer                        │
+│     Standard OS Network Stack or Kernel Bypass (DPDK)    │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -263,71 +262,104 @@ The ref-count keeps the `Socket` alive even if another thread erases it from the
 
 ---
 
-### 🔲 Phase 1 — Binary Protocol & Broker Core (NEXT)
+### ✅ Phase 1 — Binary Protocol & Broker Core (COMPLETE)
 
 **Goal:** Build the actual pub/sub broker described in the README.
 
-**Planned additions:**
-- `Broker` class with `std::unordered_map<string, vector<SocketHandle>>` topic registry
-- Separate `broker_main.cpp`, `producer_main.cpp`, `consumer_main.cpp` binaries
-- Full SUBSCRIBE / PUBLISH / DATA message routing
-- Topic-based fan-out (not broadcast-to-all)
+#### Architectural Improvements
+
+| Component | Purpose | Implementation Details |
+|---|---|---|
+| **Broker Core** | Centralized message routing | `Broker` class in `broker.cpp` replaces the generic `MessagingNode`. Handles client connections and routing. |
+| **Topic Registry** | Fast topic-based fan-out | `std::unordered_map<string, vector<SocketHandle>>` provides O(1) topic lookup for lightning-fast routing of `PUBLISH` messages to `SUBSCRIBE`d clients. |
+| **Client Separation** | Decoupling producers/consumers | Code split into three distinct binaries (`broker`, `producer`, `consumer`) to accurately model a real-world pub/sub environment. |
+| **Routing Safety** | Thread-safe fan-out | Uses a snapshot pattern: subscribers are copied into a local `std::vector<shared_ptr<Socket>>` under a lock, and the lock is released before `send_message` blocks. |
+
+#### Files Changed & Components Added
+
+| File | Change |
+|---|---|
+| `include/broker/broker.hpp` | **New** — `Broker` header defining the topic registry and routing mechanics. |
+| `src/broker/broker.cpp` | **New** — `Broker` implementation including `SUBSCRIBE` / `PUBLISH` handling. |
+| `src/app/broker_main.cpp` | **New** — Broker executable entry point. |
+| `src/app/producer_main.cpp` | **New** — Producer executable entry point. |
+| `src/app/consumer_main.cpp` | **New** — Consumer executable entry point. |
+| `CMakeLists.txt` | Refactored to build `broker`, `producer`, and `consumer` binaries linking to a shared `messaging_core` static library. |
+| `src/app/main.cpp` | *Deleted* — replaced by the three specialized binaries. |
+| `src/network/messaging_node.*` | *Deleted* — obsolete p2p node logic removed. |
+
+#### Knowledge Base Entries Created
+
+- `knowledge_base/phase_1/01_pubsub_model.md`
+- `knowledge_base/phase_1/02_hash_tables_for_routing.md`
+- `knowledge_base/phase_1/03_binary_protocol_design.md`
 
 ---
 
-### 🔲 Phase 2 — Non-Blocking I/O Event Loop
+### 🔲 Phase 2 — Abstraction Layer & Baseline Benchmarking (NEXT)
 
-**Goal:** Replace thread-per-connection with epoll (Linux) / IOCP (Windows).
-
-**Planned additions:**
-- `IOPoller` abstract interface
-- `EpollPoller` (Linux) and `SelectPoller` (cross-platform fallback)
-- Event-driven `receiveLoop` on a single thread
-
----
-
-### 🔲 Phase 3 — Lock-Free Ring Buffer
-
-**Goal:** Eliminate mutex contention on the broker hot path.
-
-**Planned additions:**
-- SPSC (Single-Producer Single-Consumer) lock-free ring buffer
-- Cache-line alignment (`alignas(64)`) to prevent false sharing
-- `std::atomic` with `acquire`/`release` memory ordering
-
----
-
-### 🔲 Phase 4 — Zero-Copy I/O
-
-**Goal:** Reduce memory copies and syscall overhead.
-
-**Planned additions:**
-- `writev()` / `WSASend` for scatter-gather (header + body in one syscall)
-- `TCP_NODELAY` for latency-critical paths
-- Profiling to validate improvement
-
----
-
-### 🔲 Phase 5 — Benchmarking
-
-**Goal:** Measure everything. Establish p50/p99 baseline.
+**Goal:** Prepare the codebase for multiple transport strategies and establish a TCP performance baseline.
 
 **Planned additions:**
-- Latency histogram in `benchmarks/perf_overhead.cpp`
-- Round-trip time measurement (not one-way throughput)
-- Coordinated-omission-aware statistics
+- `ITransport` interface to decouple Application logic from Network logic.
+- Refactor existing TCP client/broker behind `TcpTransport`.
+- Build `benchmarks/` to measure p50/p99 latency and throughput for the basic TCP mode.
 
 ---
 
-### 🔲 Phase 6 — Persistence (Write-Ahead Log)
+### 🔲 Phase 3 — TCP Optimization: Event Loops (epoll/IOCP)
 
-**Goal:** Messages survive broker restarts.
+**Goal:** Push the centralized TCP Broker strategy to its maximum potential.
+
+**Planned additions:**
+- Replace thread-per-connection with `epoll` (Linux) / `IOCP` (Windows).
+- Non-blocking socket I/O.
+- Benchmark validation (comparing against Phase 2 baseline to prove no regressions).
 
 ---
 
-### 🔲 Phase 7 — Consumer Groups & Partitioning
+### 🔲 Phase 4 — TCP Optimization: Lock-Free Data Structures
 
-**Goal:** Scale to multiple consumers with delivery ordering guarantees.
+**Goal:** Eliminate mutex contention in the TCP Broker hot path.
+
+**Planned additions:**
+- SPSC/MPMC lock-free ring buffers (LMAX Disruptor style).
+- Background worker threads for async I/O dispatch.
+- Benchmark validation to observe latency jitter reduction.
+
+---
+
+### 🔲 Phase 5 — Brokerless Strategy: UDP Multicast
+
+**Goal:** Introduce the second transport strategy for extreme low-latency environments.
+
+**Planned additions:**
+- `UdpMulticastTransport` implementing the `ITransport` interface.
+- CLI flags to toggle between `--mode tcp` and `--mode udp`.
+- Hardware-level fan-out (no broker executable required).
+- Benchmark validation (TCP vs. UDP Multicast latency comparison).
+
+---
+
+### 🔲 Phase 6 — UDP Reliability Layer (NAKs)
+
+**Goal:** Add configurable delivery guarantees to the lossy UDP strategy.
+
+**Planned additions:**
+- Sequence numbers in packet headers.
+- Negative Acknowledgment (NAK) logic for consumers to request missed packets.
+- Retransmission ring buffers on the producer side.
+
+---
+
+### 🔲 Phase 7 — Kernel Bypass (DPDK/XDP)
+
+**Goal:** Achieve the absolute minimum hardware latency for the UDP strategy.
+
+**Planned additions:**
+- OS networking stack bypass (user-space NIC polling).
+- Thread pinning and CPU isolation.
+- Final benchmark validation (targeting sub-10μs latency).
 
 ---
 

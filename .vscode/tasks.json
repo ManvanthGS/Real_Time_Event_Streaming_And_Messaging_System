@@ -1,0 +1,49 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Broker",
+            "type": "shell",
+            "command": "${workspaceFolder}/build/linux-debug/broker 9000",
+            "isBackground": true,
+            "presentation": {
+                "group": "pubsub_system",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Consumer",
+            "type": "shell",
+            "command": "sleep 0.5 && ${workspaceFolder}/build/linux-debug/consumer 127.0.0.1 9000 BTC_USD",
+            "isBackground": true,
+            "presentation": {
+                "group": "pubsub_system",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Producer",
+            "type": "shell",
+            "command": "sleep 0.5 && ${workspaceFolder}/build/linux-debug/producer 127.0.0.1 9000 BTC_USD",
+            "isBackground": true,
+            "presentation": {
+                "group": "pubsub_system",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Pub/Sub System (Split Terminal)",
+            "dependsOn": [
+                "Run Broker",
+                "Run Consumer",
+                "Run Producer"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
+        }
+    ]
+}

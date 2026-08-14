@@ -29,70 +29,89 @@
 
 ---
 
-## Phase 1 — Broker Core *(coming soon)*
+## Phase 1 — Broker Core
 
 > Theme: Building the actual pub/sub routing system.
 > Core concepts: Hash table internals, O(1) routing, binary protocol design, topic fan-out.
 
 | File | Topic |
 |---|---|
-| `phase_1/01_pubsub_model.md` | Producer/consumer/broker roles, topic fan-out, delivery semantics |
-| `phase_1/02_hash_tables_for_routing.md` | `std::unordered_map` internals, load factor, rehashing, why it beats `std::map` for routing |
-| `phase_1/03_binary_protocol_design.md` | Self-describing vs. schema-based formats, Protobuf vs. hand-rolled, versioning |
+| [01_pubsub_model.md](phase_1/01_pubsub_model.md) | Producer/consumer/broker roles, topic fan-out, delivery semantics |
+| [02_hash_tables_for_routing.md](phase_1/02_hash_tables_for_routing.md) | `std::unordered_map` internals, load factor, rehashing, O(1) routing |
+| [03_binary_protocol_design.md](phase_1/03_binary_protocol_design.md) | Self-describing vs schema-based formats, Protobuf vs hand-rolled binary |
 
 ---
 
-## Phase 2 — Non-Blocking I/O *(coming soon)*
+## Phase 2 — Abstraction Layer & Baseline Benchmarking *(coming soon)*
 
-> Theme: Scaling connections from dozens to thousands.
-> Core concepts: `epoll`, IOCP, edge vs. level triggering, event-driven architecture.
+> Theme: Preparing the codebase for multiple transport strategies.
+> Core concepts: Interfaces, latency percentiles, benchmarking.
 
 | File | Topic |
 |---|---|
-| `phase_2/01_epoll_fundamentals.md` | `epoll_create1`, `epoll_ctl`, `epoll_wait`, O(1) event notification |
-| `phase_2/02_level_vs_edge_triggered.md` | LT vs ET semantics, non-blocking sockets, `O_NONBLOCK` |
-| `phase_2/03_iocp_windows.md` | I/O Completion Ports, overlapped I/O, thread pool integration |
-| `phase_2/04_event_loop_design.md` | Single-threaded event loops, reactor pattern, callback dispatch |
+| `phase_2/01_transport_abstraction.md` | Dependency injection, interfaces vs inheritance |
+| `phase_2/02_measuring_latency.md` | p50, p99, coordinated omission, HDR histogram |
 
 ---
 
-## Phase 3 — Lock-Free Data Structures *(coming soon)*
+## Phase 3 — TCP Optimization: Event Loops *(coming soon)*
 
-> Theme: Eliminating mutex contention from the hot path.
-> Core concepts: CPU cache lines, false sharing, `std::atomic` memory ordering, ring buffers.
+> Theme: Scaling the centralized TCP Broker connections.
+> Core concepts: `epoll`, IOCP, edge vs. level triggering, non-blocking I/O.
 
 | File | Topic |
 |---|---|
-| `phase_3/01_cache_lines_and_false_sharing.md` | 64-byte cache lines, coherence protocol (MESI), `alignas(64)` |
-| `phase_3/02_memory_ordering.md` | `relaxed`, `acquire`, `release`, `seq_cst` — when to use each |
-| `phase_3/03_spsc_ring_buffer.md` | Single-producer single-consumer lock-free queue implementation |
-| `phase_3/04_mpmc_queues.md` | Multi-producer queues, double-CAS, ABA problem |
+| `phase_3/01_epoll_fundamentals.md` | `epoll_wait`, O(1) event notification, non-blocking sockets |
+| `phase_3/02_event_loop_design.md` | Single-threaded event loops, reactor pattern, callback dispatch |
 
 ---
 
-## Phase 4 — Zero-Copy I/O *(coming soon)*
+## Phase 4 — TCP Optimization: Lock-Free Queues *(coming soon)*
 
-> Theme: Eliminating memory copies and reducing syscall overhead.
-> Core concepts: `writev`, scatter-gather I/O, `sendfile`, `TCP_NODELAY` vs. Nagle.
+> Theme: Eliminating mutex contention from the TCP broker hot path.
+> Core concepts: CPU cache lines, false sharing, `std::atomic`, ring buffers.
 
 | File | Topic |
 |---|---|
-| `phase_4/01_syscall_overhead.md` | User↔kernel context switch cost (~200ns), batching with `writev` |
-| `phase_4/02_zero_copy_techniques.md` | `sendfile()`, `splice()`, `MSG_ZEROCOPY`, memory-mapped files |
-| `phase_4/03_tcp_tuning.md` | `TCP_NODELAY`, `TCP_CORK`, `SO_SNDBUF`/`SO_RCVBUF` tuning |
+| `phase_4/01_cache_lines_and_false_sharing.md` | 64-byte cache lines, MESI coherence, `alignas(64)` |
+| `phase_4/02_memory_ordering.md` | `relaxed`, `acquire`, `release`, `seq_cst` |
+| `phase_4/03_spsc_ring_buffer.md` | Single-producer single-consumer lock-free queue |
 
 ---
 
-## Phase 5 — Benchmarking *(coming soon)*
+## Phase 5 — Brokerless Strategy: UDP Multicast *(coming soon)*
 
-> Theme: Measuring correctly so optimization is based on data, not guesses.
-> Core concepts: Latency percentiles, coordinated omission, `perf`/flamegraphs.
+> Theme: Extreme low-latency by dropping the middleman.
+> Core concepts: UDP vs TCP, IP Multicast, IGMP.
 
 | File | Topic |
 |---|---|
-| `phase_5/01_latency_percentiles.md` | p50, p99, p99.9 — why averages lie, HDR histogram |
-| `phase_5/02_coordinated_omission.md` | The most common benchmarking mistake, how to avoid it |
-| `phase_5/03_profiling_tools.md` | `perf stat`, `perf record`, flamegraphs, Valgrind, Tracy |
+| `phase_5/01_udp_vs_tcp_latency.md` | Head-of-Line blocking, stateless protocols, jitter |
+| `phase_5/02_hardware_multicast.md` | How network switches duplicate packets, IGMP joins |
+
+---
+
+## Phase 6 — UDP Reliability Layer *(coming soon)*
+
+> Theme: Building guarantees on top of a lossy protocol.
+> Core concepts: Sequence numbers, NAKs, at-least-once delivery.
+
+| File | Topic |
+|---|---|
+| `phase_6/01_sequence_numbers_and_naks.md` | Negative Acknowledgments, gap detection |
+| `phase_6/02_retransmission_buffers.md` | Producer-side ring buffers for replay requests |
+
+---
+
+## Phase 7 — Kernel Bypass *(coming soon)*
+
+> Theme: Bypassing the OS network stack entirely for sub-10μs latency.
+> Core concepts: DPDK, XDP, CPU pinning, user-space polling.
+
+| File | Topic |
+|---|---|
+| `phase_7/01_kernel_bypass_intro.md` | DPDK vs standard sockets, interrupt vs polling |
+| `phase_7/02_thread_pinning.md` | CPU affinity, NUMA nodes, isolating cores |
 
 ---
 

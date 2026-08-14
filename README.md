@@ -21,14 +21,14 @@ protocol — is built and understood from first principles.
 
 | Phase | Goal | Status |
 |---|---|---|
-| **Phase 0** | Foundation — fix all correctness bugs | ✅ **Complete** |
-| **Phase 1** | Broker core — topic routing (SUBSCRIBE / PUBLISH / DATA) | 🔲 Next |
-| **Phase 2** | Non-blocking I/O — epoll (Linux) / IOCP (Windows) | 🔲 Planned |
-| **Phase 3** | Lock-free ring buffer — eliminate mutex on hot path | 🔲 Planned |
-| **Phase 4** | Zero-copy I/O — `writev`, `TCP_NODELAY`, scatter-gather | 🔲 Planned |
-| **Phase 5** | Benchmarking — p50/p99 latency histograms | 🔲 Planned |
-| **Phase 6** | Persistence — Write-Ahead Log | 🔲 Planned |
-| **Phase 7** | Consumer groups & topic partitioning | 🔲 Planned |
+| **Phase 0** | Foundation — fix all correctness bugs | ✅ Complete |
+| **Phase 1** | Broker core — topic routing (SUBSCRIBE / PUBLISH / DATA) | ✅ **Complete** |
+| **Phase 2** | Transport abstraction & Baseline TCP Benchmarking | 🔲 Next |
+| **Phase 3** | TCP Optimization: Event Loops (`epoll`/`IOCP`) | 🔲 Planned |
+| **Phase 4** | TCP Optimization: Lock-Free Ring Buffers | 🔲 Planned |
+| **Phase 5** | Brokerless Strategy: UDP Multicast | 🔲 Planned |
+| **Phase 6** | UDP Reliability Layer (Sequence numbers, NAKs) | 🔲 Planned |
+| **Phase 7** | Kernel Bypass (DPDK / XDP) | 🔲 Planned |
 
 ---
 
@@ -122,43 +122,65 @@ All concepts learned in Phase 0 are documented in `knowledge_base/phase_0/`:
 
 ---
 
+## ✅ Phase 1 — Broker Core & Pub/Sub Routing
+
+Phase 1 introduced the core messaging functionality, replacing the initial P2P `MessagingNode` with a dedicated centralized `Broker` architecture.
+
+### What Was Built
+
+1. **Broker Core (`broker.cpp`)**: A centralized routing engine that accepts connections and routes messages. 
+2. **O(1) Topic Routing**: Implemented an `std::unordered_map<std::string, std::vector<SocketHandle>>` to act as the topic registry. When a `PUBLISH` message is received, the broker performs an O(1) hash lookup to instantly find all subscribers.
+3. **Dedicated Executables**: Code was decoupled into three distinct binaries to model a real environment:
+   - `broker`: The central routing node.
+   - `producer`: CLI tool to connect and `PUBLISH` to a topic.
+   - `consumer`: CLI tool to connect, `SUBSCRIBE`, and listen to a topic.
+4. **Snapshot Fan-out**: Mutex contention was minimized during topic broadcast. The broker locks the routing table just long enough to copy the list of active subscribers into a local `std::vector`, releases the lock, and then iterates the local copy to dispatch I/O (which can block).
+
+### Knowledge Base Entries Created (Phase 1)
+
+Concepts learned during Phase 1 are detailed in `knowledge_base/phase_1/`:
+- `01_pubsub_model.md`: Decoupling benefits, topic fan-out, and delivery semantics.
+- `02_hash_tables_for_routing.md`: `std::unordered_map` internals, O(1) lookup, and cache locality.
+- `03_binary_protocol_design.md`: Hand-rolled binary overhead vs JSON/Protobuf, and our framing spec.
+
+---
+
 ## Architecture
 
-### Current (Phase 0)
-
-```
-┌─────────────────────────────────────────┐
-│          Application Layer              │
-│   MessagingNode CLI  (src/app/main.cpp) │
-├─────────────────────────────────────────┤
-│          Protocol Layer                 │
-│  FramedSocket   MessageHeader           │
-│  (framing.hpp)  (message.hpp)           │
-├─────────────────────────────────────────┤
-│          Network Layer                  │
-│  Socket — RAII, move-only, blocking TCP │
-│  send_all()  recv_exact()               │
-├─────────────────────────────────────────┤
-│          Platform Layer                 │
-│  common.hpp — compile-time #ifdef       │
-│  Linux: int fd    Windows: SOCKET       │
-└─────────────────────────────────────────┘
-```
-
-### Target (End State)
+### Current (Phase 1)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  Producer CLI    Consumer CLI    Broker CLI               │
 ├──────────────────────────────────────────────────────────┤
-│  Broker Core — Topic Registry, Subscriber Map, Routing   │
+│  Broker Core — Topic Registry (unordered_map), Routing    │
 ├──────────────────────────────────────────────────────────┤
-│  Protocol Layer — FramedSocket, MessageHeader, WAL       │
+│  Protocol Layer — FramedSocket, MessageHeader             │
 ├──────────────────────────────────────────────────────────┤
-│  Network Layer — EventLoop (epoll/IOCP), Lock-Free Queue │
+│  Network Layer — Socket (RAII, blocking TCP)              │
 ├──────────────────────────────────────────────────────────┤
 │  Platform Layer — Linux / Windows compile-time selection │
 └──────────────────────────────────────────────────────────┘
+```
+
+### Target (Dual-Mode Platform)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Application Layer                     │
+│               Producer CLI    Consumer CLI               │
+├─────────────────────────────────────────────────────────┤
+│                Transport Abstraction (ITransport)        │
+├──────────────────────────────┬──────────────────────────┤
+│    Strategy A: TCP Broker    │ Strategy B: Brokerless   │
+│   (Centralized, WAN/Cloud)   │   (UDP Multicast, LAN)   │
+├──────────────────────────────┼──────────────────────────┤
+│   epoll/IOCP Event Loop      │ Sequence Numbers & NAKs  │
+│   Lock-Free Ring Buffers     │ Zero-Copy UDP Sockets    │
+├──────────────────────────────┴──────────────────────────┤
+│                    Platform Layer                        │
+│     Standard OS Network Stack or Kernel Bypass (DPDK)    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -193,25 +215,18 @@ The `length` field always includes the 8-byte header itself.
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
 # Build
-cmake --build build --target messaging_app
+cmake --build build
 
-# Run — Node A (port 9001)
-./build/messaging_app 9001
+# Run the Broker (Terminal 1)
+./build/broker 9000
 
-# Run — Node B (port 9002), then connect and send:
-./build/messaging_app 9002
-> connect 127.0.0.1 9001
-> send hello from node B
+# Run a Consumer (Terminal 2)
+./build/consumer 127.0.0.1 9000 BTC_USD
+
+# Run a Producer (Terminal 3)
+./build/producer 127.0.0.1 9000 BTC_USD
+> price=105.2
 ```
-
-### Available Commands
-
-| Command | Description |
-|---|---|
-| `connect <ip> <port>` | Connect to a peer node |
-| `send <message>` | Broadcast a framed message to all connected peers |
-| `help` | Show command reference |
-| `quit` | Graceful shutdown |
 
 ---
 

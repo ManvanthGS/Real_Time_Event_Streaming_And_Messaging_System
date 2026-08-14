@@ -2,36 +2,14 @@
     "version": 3,
     "cmakeMinimumRequired": {
         "major": 3,
-        "minor": 15
+        "minor": 20
     },
     "configurePresets": [
         {
-            "name": "ninja-debug",
-            "displayName": "Ninja Debug Configure (Windows)",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/${presetName}",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            },
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
-            }
-        },
-        {
-            "name": "ninja-release",
-            "displayName": "Ninja Release Configure (Windows)",
-            "inherits": "ninja-debug",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release"
-            }
-        },
-        {
-            "name": "wsl-debug",
-            "displayName": "Ninja Debug Configure (WSL/Linux)",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/${presetName}",
+            "name": "linux-debug",
+            "displayName": "Linux Debug",
+            "description": "Debug build for Linux using default generator",
+            "binaryDir": "${sourceDir}/build/linux-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             },
@@ -42,26 +20,34 @@
             }
         },
         {
-            "name": "wsl-release",
-            "displayName": "Ninja Release Configure (WSL/Linux)",
-            "inherits": "wsl-debug",
+            "name": "linux-release",
+            "displayName": "Linux Release",
+            "inherits": "linux-debug",
+            "binaryDir": "${sourceDir}/build/linux-release",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
         },
         {
-            "name": "msvc-debug",
-            "displayName": "MSVC Debug Configure",
+            "name": "windows-debug",
+            "displayName": "Windows Debug",
+            "description": "Debug build for Windows using MSVC",
             "generator": "Visual Studio 17 2022",
-            "binaryDir": "${sourceDir}/build/${presetName}",
+            "binaryDir": "${sourceDir}/build/windows-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
             }
         },
         {
-            "name": "msvc-release",
-            "displayName": "MSVC Release Configure",
-            "inherits": "msvc-debug",
+            "name": "windows-release",
+            "displayName": "Windows Release",
+            "inherits": "windows-debug",
+            "binaryDir": "${sourceDir}/build/windows-release",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
@@ -69,28 +55,20 @@
     ],
     "buildPresets": [
         {
-            "name": "build-debug",
-            "configurePreset": "ninja-debug"
+            "name": "linux-debug",
+            "configurePreset": "linux-debug"
         },
         {
-            "name": "build-release",
-            "configurePreset": "ninja-release"
+            "name": "linux-release",
+            "configurePreset": "linux-release"
         },
         {
-            "name": "build-wsl-debug",
-            "configurePreset": "wsl-debug"
+            "name": "windows-debug",
+            "configurePreset": "windows-debug"
         },
         {
-            "name": "build-wsl-release",
-            "configurePreset": "wsl-release"
-        },
-        {
-            "name": "build-msvc-debug",
-            "configurePreset": "msvc-debug"
-        },
-        {
-            "name": "build-msvc-release",
-            "configurePreset": "msvc-release"
+            "name": "windows-release",
+            "configurePreset": "windows-release"
         }
     ]
 }
