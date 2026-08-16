@@ -268,10 +268,14 @@ All platform differences are resolved at **compile time** (`#ifdef _WIN32`) — 
 │       ├── message.hpp         # MessageHeader + endian-safe serialization
 │       └── framing.hpp         # FramedSocket + ParsedMessage [Phase 0]
 ├── src/
-│   ├── app/main.cpp            # CLI entry point
+│   ├── app/
+│   │   ├── broker_main.cpp     # Broker CLI
+│   │   ├── consumer_main.cpp   # Consumer CLI
+│   │   └── producer_main.cpp   # Producer CLI
+│   ├── broker/
+│   │   └── broker.cpp          # Centralized routing logic
 │   ├── network/
-│   │   ├── socket.cpp
-│   │   └── messaging_node.cpp
+│   │   └── socket.cpp          # RAII BSD Socket
 │   └── protocol/
 │       └── framing.cpp         # [Phase 0]
 ├── docs/

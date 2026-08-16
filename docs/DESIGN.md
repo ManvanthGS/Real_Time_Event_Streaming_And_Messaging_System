@@ -274,6 +274,8 @@ The ref-count keeps the `Socket` alive even if another thread erases it from the
 | **Topic Registry** | Fast topic-based fan-out | `std::unordered_map<string, vector<SocketHandle>>` provides O(1) topic lookup for lightning-fast routing of `PUBLISH` messages to `SUBSCRIBE`d clients. |
 | **Client Separation** | Decoupling producers/consumers | Code split into three distinct binaries (`broker`, `producer`, `consumer`) to accurately model a real-world pub/sub environment. |
 | **Routing Safety** | Thread-safe fan-out | Uses a snapshot pattern: subscribers are copied into a local `std::vector<shared_ptr<Socket>>` under a lock, and the lock is released before `send_message` blocks. |
+| **Decoupled Lifetimes** | Safe Client Tracking | The topic registry stores `SocketHandle` (integer ID) rather than `shared_ptr<Socket>`. This acts as a zero-cost weak reference. If a client disconnects, they are removed from `m_peers`, and routing will safely ignore their orphaned ID during fan-out, preventing "zombie sockets". |
+| **Protocol Agnosticism** | Adapter Pattern | The broker tracks raw `Socket` objects instead of `FramedSocket`. `FramedSocket` is instantiated dynamically on the stack at zero cost. This keeps the core connection registry completely independent of the wire protocol. |
 
 #### Files Changed & Components Added
 

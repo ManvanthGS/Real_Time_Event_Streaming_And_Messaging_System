@@ -62,6 +62,13 @@ class Broker
     //   std::map uses a red-black tree (O(log N) lookup).
     //   std::unordered_map uses a hash table (O(1) average lookup).
     //   At 10,000 topics, O(1) significantly reduces routing latency.
+    //
+    // WHY store SocketHandle instead of std::shared_ptr<Socket>?
+    //   1. Lifetime Management (Zombie Sockets): If this map owned shared_ptrs, 
+    //      a disconnected client would stay alive in memory until scrubbed from every topic.
+    //   2. Validation: The m_peers map is the single source of truth. By storing an ID, 
+    //      we must look up the ID in m_peers during routing. If it's gone, we safely skip it.
+    //      This acts as a fast, zero-overhead weak reference.
     //   See: knowledge_base/phase_1/02_hash_tables_for_routing.md
     std::mutex m_routingMutex;
     std::unordered_map<std::string, std::vector<SocketHandle>> m_subscriptions;

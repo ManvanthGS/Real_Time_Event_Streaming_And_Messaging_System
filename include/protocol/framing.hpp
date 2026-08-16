@@ -43,6 +43,13 @@ struct ParsedMessage
 //     4. Slice body into topic[0..topic_length] and payload[topic_length..]
 //
 // See: knowledge_base/phase_0/01_tcp_stream_semantics.md
+//
+// DESIGN PATTERN: Adapter / Decorator
+//   FramedSocket only holds a reference to a Socket (`Socket& m_socket`).
+//   It has no internal state or allocated memory.
+//   Instantiating `FramedSocket framed(*sock);` on the stack costs zero CPU cycles.
+//   This keeps the underlying `Socket` class protocol-agnostic, allowing us to 
+//   freely adapt it to different protocols (like HTTP or WebSockets) in the future.
 // ---------------------------------------------------------------------------
 class FramedSocket
 {
